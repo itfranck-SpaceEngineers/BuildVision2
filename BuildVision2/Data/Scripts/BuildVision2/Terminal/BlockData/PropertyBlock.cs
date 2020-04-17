@@ -1,15 +1,12 @@
 using RichHudFramework;
-using RichHudFramework.Internal;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces;
 using Sandbox.ModAPI.Interfaces.Terminal;
 using System.Collections.Generic;
 using System.Text;
 using VRage;
-using VRageMath;
 using VRage.ModAPI;
-using IMyLandingGear = SpaceEngineers.Game.ModAPI.Ingame.IMyLandingGear;
-using IMyParachute = SpaceEngineers.Game.ModAPI.Ingame.IMyParachute;
+using VRageMath;
 
 namespace DarkHelmet.BuildVision2
 {
@@ -20,15 +17,7 @@ namespace DarkHelmet.BuildVision2
     {
         public static PropBlockConfig Cfg { get { return BvConfig.Current.block; } set { BvConfig.Current.block = value; } }
 
-        /// <summary>
-        /// Associated terminal block
-        /// </summary>
-        public IMyTerminalBlock TBlock { get; private set; }
-
-        /// <summary>
-        /// Block type identifier. Uses IMyCubeBlock.BlockDefinition.TypeIdString.
-        /// </summary>
-        public string TypeID { get; }
+        public SuperBlock BlockData { get; }
 
         /// <summary>
         /// Read-only collection of block members
@@ -40,56 +29,35 @@ namespace DarkHelmet.BuildVision2
         /// </summary>
         public int EnabledMembers => GetEnabledElementCount();
 
-        /// <summary>
-        /// True if the block integrity is above its breaking threshold
-        /// </summary>
-        public bool IsFunctional { get { return TBlock != null && TBlock.IsFunctional; } }
-
-        /// <summary>
-        /// True if the block is functional and able to do work.
-        /// </summary>
-        public bool IsWorking { get { return TBlock != null && TBlock.IsWorking; } }
-
-        /// <summary>
-        /// True if the local player has terminal access permissions
-        /// </summary>
-        public bool CanLocalPlayerAccess { get { return TBlock != null && TBlock.HasLocalPlayerAccess(); } }
-
         public readonly Vector3D modelOffset;
 
         private readonly List<IBlockMember> blockMembers;
         private readonly List<BvTerminalPropertyBase> blockProperties;
 
-        public PropertyBlock(IMyTerminalBlock tBlock)
+        public PropertyBlock(SuperBlock data)
         {
-            TBlock = tBlock;
-            TypeID = tBlock.BlockDefinition.TypeIdString;
+            BlockData = data;
 
             blockMembers = new List<IBlockMember>();
             blockProperties = new List<BvTerminalPropertyBase>();
             BlockMembers = new ReadOnlyCollection<IBlockMember>(blockMembers);
 
-            GetScrollableProps();
-            GetScrollableActions();
-
             BoundingBoxD bb;
-            tBlock.SlimBlock.GetWorldBoundingBox(out bb);
-            modelOffset = bb.Center - tBlock.GetPosition();
-
-            TBlock.SlimBlock.FatBlock.OnMarkForClose += BlockClosing;
+            data.TBlock.SlimBlock.GetWorldBoundingBox(out bb);
+            modelOffset = bb.Center - data.TBlock.GetPosition();
         }
 
-        private void BlockClosing(IMyEntity entity)
+        public void GenerateProperties()
         {
-            // Null the block reference to avoid holding onto a block that no longer exists
-            TBlock = null;
+            GetScrollableProps();
+            GetScrollableActions();
         }
 
         /// <summary>
         /// Gets the block's current position.
         /// </summary>
         public Vector3D GetPosition() =>
-             TBlock != null ? TBlock.GetPosition() : Vector3D.Zero;
+             BlockData.TBlock != null ? BlockData.TBlock.GetPosition() : Vector3D.Zero;
 
         /// <summary>
         /// Applies property settings from block data and returns the number of properties successfully updated.
@@ -119,7 +87,7 @@ namespace DarkHelmet.BuildVision2
             for (int n = 0; n < blockProperties.Count; n++)
                 propData.Add(blockProperties[n].GetPropertyData());
 
-            return new BlockData(TypeID, propData);
+            return new BlockData(BlockData.TypeID, propData);
         }
 
         private int GetEnabledElementCount()
@@ -194,13 +162,13 @@ namespace DarkHelmet.BuildVision2
         {
             List<ITerminalProperty> properties = new List<ITerminalProperty>(12);
             string name;
-            TBlock.GetProperties(properties);
+            BlockData.TBlock.GetProperties(properties);
 
             foreach (ITerminalProperty prop in properties)
             {
                 var control = prop as IMyTerminalControl;
 
-                if (control != null && control.CanUseControl(TBlock))
+                if (control != null && control.CanUseControl(BlockData.TBlock))
                 {
                     name = GetTooltipName(prop);
 
@@ -210,41 +178,41 @@ namespace DarkHelmet.BuildVision2
                         {
                             var textProp = prop as ITerminalProperty<StringBuilder>;
 
-                            if (textProp.CanAccessValue(TBlock))
+                            if (textProp.CanAccessValue(BlockData.TBlock))
                             {
                                 if (prop.Id == "Name" || prop.Id == "CustomName")
-                                    blockProperties.Insert(0, new TextProperty(name, textProp, control, TBlock));
+                                    blockProperties.Insert(0, new TextProperty(name, textProp, control, BlockData));
                                 else
-                                    blockProperties.Add(new TextProperty(name, textProp, control, TBlock));
+                                    blockProperties.Add(new TextProperty(name, textProp, control, BlockData));
                             }
                         }
                         if (prop is IMyTerminalControlCombobox)
                         {
                             var comboBox = prop as IMyTerminalControlCombobox;
 
-                            if (comboBox.CanAccessValue(TBlock))
-                                blockProperties.Add(new ComboBoxProperty(name, comboBox, control, TBlock));
+                            if (comboBox.CanAccessValue(BlockData.TBlock))
+                                blockProperties.Add(new ComboBoxProperty(name, comboBox, control, BlockData));
                         }
                         else if (prop is ITerminalProperty<bool>)
                         {
                             var boolProp = prop as ITerminalProperty<bool>;
 
-                            if (boolProp.CanAccessValue(TBlock))
-                                blockProperties.Add(new BoolProperty(name, boolProp, control, TBlock));
+                            if (boolProp.CanAccessValue(BlockData.TBlock))
+                                blockProperties.Add(new BoolProperty(name, boolProp, control, BlockData));
                         }
                         else if (prop is ITerminalProperty<float>)
                         {
                             var floatProp = prop as ITerminalProperty<float>;
 
-                            if (floatProp.CanAccessValue(TBlock))
-                                blockProperties.Add(new FloatProperty(name, floatProp, control, TBlock));
+                            if (floatProp.CanAccessValue(BlockData.TBlock))
+                                blockProperties.Add(new FloatProperty(name, floatProp, control, BlockData));
                         }
                         else if (prop is ITerminalProperty<Color>)
                         {
                             var colorProp = prop as ITerminalProperty<Color>;
 
-                            if (colorProp.CanAccessValue(TBlock))
-                                blockProperties.AddRange(ColorProperty.GetColorProperties(name, colorProp, control, TBlock));
+                            if (colorProp.CanAccessValue(BlockData.TBlock))
+                                blockProperties.AddRange(ColorProperty.GetColorProperties(name, colorProp, control, BlockData));
                         }
                     }
                 }
@@ -258,29 +226,29 @@ namespace DarkHelmet.BuildVision2
         /// </summary>
         private void GetScrollableActions()
         {
-            if (TBlock is IMyMechanicalConnectionBlock)
+            if (BlockData.SubtypeId.HasFlag(TBlockSubtypes.MechanicalConnection))
             {
-                BlockAction.GetMechActions((IMyMechanicalConnectionBlock)TBlock, blockMembers);
+                BlockAction.GetMechActions(BlockData, blockMembers);
             }
-            else if (TBlock is IMyDoor)
+            else if (BlockData.SubtypeId.HasFlag(TBlockSubtypes.Door))
             {
-                BlockAction.GetDoorActions((IMyDoor)TBlock, blockMembers);
+                BlockAction.GetDoorActions(BlockData, blockMembers);
             }
-            else if (TBlock is IMyWarhead)
+            else if (BlockData.SubtypeId.HasFlag(TBlockSubtypes.Warhead))
             {
-                BlockAction.GetWarheadActions((IMyWarhead)TBlock, blockMembers);
+                BlockAction.GetWarheadActions(BlockData, blockMembers);
             }
-            else if (TBlock is IMyLandingGear)
+            else if (BlockData.SubtypeId.HasFlag(TBlockSubtypes.LandingGear))
             {
-                BlockAction.GetGearActions((IMyLandingGear)TBlock, blockMembers);
+                BlockAction.GetGearActions(BlockData, blockMembers);
             }
-            else if (TBlock is IMyShipConnector)
+            else if (BlockData.SubtypeId.HasFlag(TBlockSubtypes.Connector))
             {
-                BlockAction.GetConnectorActions((IMyShipConnector)TBlock, blockMembers);
+                BlockAction.GetConnectorActions(BlockData, blockMembers);
             }
-            else if (TBlock is IMyParachute)
+            else if (BlockData.SubtypeId.HasFlag(TBlockSubtypes.Parachute))
             {
-                BlockAction.GetChuteActions((IMyParachute)TBlock, blockMembers);
+                BlockAction.GetChuteActions(BlockData, blockMembers);
             }
         }
     }
